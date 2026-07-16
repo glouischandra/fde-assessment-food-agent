@@ -79,6 +79,36 @@ def run_tests():
     nutrition_le_dip = analyze_menu_nutrition("Le Diplomate", "Salade Nicoise")
     print("Le Diplomate Salade Nicoise estimated nutrition:", nutrition_le_dip)
     assert nutrition_le_dip["estimated_calories"] == 480, "Menu lookup failed"
+    print("\n--- 7. Testing Validation Error Handling ---")
+    # Test invalid date in save_nutrition_log
+    res_date = save_nutrition_log(
+        user_id=user_id,
+        date="invalid-date-format",
+        meal_type="lunch",
+        description="Turkey sandwich",
+        calories=350
+    )
+    print("Invalid Date Result:", res_date)
+    assert res_date["status"] == "error", "Should return error status for invalid date"
+    assert "Argument Validation Error" in res_date["message"], "Should have validation error message for date"
+
+    # Test invalid calories in save_nutrition_log
+    res_cal = save_nutrition_log(
+        user_id=user_id,
+        date=date_str,
+        meal_type="lunch",
+        description="Turkey sandwich",
+        calories=-100
+    )
+    print("Negative Calories Result:", res_cal)
+    assert res_cal["status"] == "error", "Should return error status for negative calories"
+    assert "Argument Validation Error" in res_cal["message"], "Should have validation error message for calories"
+
+    # Test invalid neighborhood in restaurant search
+    res_neigh = google_search_restaurants(query="French", neighborhood="New York")
+    print("Invalid Neighborhood Result:", res_neigh)
+    assert res_neigh["status"] == "error", "Should return error status for invalid neighborhood"
+    assert "Argument Validation Error" in res_neigh["message"], "Should have validation error message for neighborhood"
 
     print("\nALL DATABASE AND TOOL TESTS PASSED SUCCESSFULLY!")
 

@@ -2,11 +2,69 @@ import os
 import json
 from datetime import datetime
 from google.cloud import firestore
+from pydantic import BaseModel, Field, field_validator, ValidationError
+from typing import Dict, List, Optional
 
 try:
     from .trace_logging import logger
 except ImportError:
     from trace_logging import logger
+
+# -------------------------------------------------------------
+# Input Validation Schemas
+# -------------------------------------------------------------
+class GetUserProfileInput(BaseModel):
+    user_id: str = Field(..., description="Unique identifier for the user")
+
+
+class UpdateUserProfileInput(BaseModel):
+    user_id: str = Field(..., description="Unique identifier for the user")
+    fields: Dict = Field(..., description="Dictionary of fields to update in the profile")
+
+
+class SaveNutritionLogInput(BaseModel):
+    user_id: str = Field(..., description="Unique identifier for the user")
+    date: str = Field(..., description="Date string formatted as YYYY-MM-DD")
+    meal_type: str = Field(..., description="Type of meal: breakfast, lunch, dinner, snack")
+    description: str = Field(..., description="Description of the food eaten")
+    calories: int = Field(..., description="Number of calories (must be >= 0)")
+    protein_g: int = Field(0, description="Grams of protein (must be >= 0)")
+    carbs_g: int = Field(0, description="Grams of carbohydrates (must be >= 0)")
+    fat_g: int = Field(0, description="Grams of fat (must be >= 0)")
+
+    @field_validator("date")
+    def validate_date(cls, v):
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError("date must be in YYYY-MM-DD format (e.g., 2026-07-16)")
+        return v
+
+    @field_validator("meal_type")
+    def validate_meal_type(cls, v):
+        allowed = {"breakfast", "lunch", "dinner", "snack"}
+        if v.lower() not in allowed:
+            raise ValueError(f"meal_type must be one of: {', '.join(allowed)}")
+        return v.lower()
+
+    @field_validator("calories", "protein_g", "carbs_g", "fat_g")
+    def validate_non_negative(cls, v):
+        if v < 0:
+            raise ValueError("value must be non-negative (>= 0)")
+        return v
+
+
+class GetDailyIntakeInput(BaseModel):
+    user_id: str = Field(..., description="Unique identifier for the user")
+    date: str = Field(..., description="Date string formatted as YYYY-MM-DD")
+
+    @field_validator("date")
+    def validate_date(cls, v):
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError("date must be in YYYY-MM-DD format (e.g., 2026-07-16)")
+        return v
 
 # -------------------------------------------------------------
 # Firestore / JSON Database Client Initialization
@@ -60,7 +118,7 @@ try:
     
     db = firestore.Client(project=project_id)
     # Perform a quick read check to verify connectivity and credentials
-    db.collection("users").get()
+    db.collection("users").document("connectivity_test_doc_ref").get()
     FIRESTORE_AVAILABLE = True
     logger.info("Firestore client initialized successfully.")
 except Exception as e:
@@ -94,6 +152,13 @@ def get_user_profile(user_id: str) -> dict:
     Args:
         user_id: Unique identifier for the user (e.g. "user_123").
     """
+    try:
+        GetUserProfileInput(user_id=user_id)
+    except ValidationError as ve:
+        error_msg = f"Argument Validation Error: {ve}. Please correct the parameters and call the tool again with valid inputs."
+        logger.warning(error_msg)
+        return {"status": "error", "message": error_msg}
+
     default_profile = {
         "userId": user_id,
         "name": "User",
@@ -129,18 +194,23 @@ def get_user_profile(user_id: str) -> dict:
         except Exception as e:
             logger.error(f"Firestore get_user_profile failed: {e}")
 
-    # Local JSON Fallback
-    data = _read_local_db()
-    if user_id in data["users"]:
-        profile = data["users"][user_id]
-        for k, v in default_profile.items():
-            if k not in profile:
-                profile[k] = v
-        return profile
-    else:
-        data["users"][user_id] = default_profile
-        _write_local_db(data)
-        return default_profile
+    try:
+        # Local JSON Fallback
+        data = _read_local_db()
+        if user_id in data["users"]:
+            profile = data["users"][user_id]
+            for k, v in default_profile.items():
+                if k not in profile:
+                    profile[k] = v
+            return profile
+        else:
+            data["users"][user_id] = default_profile
+            _write_local_db(data)
+            return default_profile
+    except Exception as fallback_err:
+        error_msg = f"Database Read Error: {fallback_err}. Unable to retrieve profile from backup local storage."
+        logger.error(error_msg)
+        return {"status": "error", "message": error_msg}
 
 
 def update_user_profile(user_id: str, fields: dict) -> dict:
@@ -150,7 +220,16 @@ def update_user_profile(user_id: str, fields: dict) -> dict:
         user_id: Unique identifier for the user.
         fields: A dictionary of fields to update/merge.
     """
+    try:
+        UpdateUserProfileInput(user_id=user_id, fields=fields)
+    except ValidationError as ve:
+        error_msg = f"Argument Validation Error: {ve}. Please correct the parameters and call the tool again with valid inputs."
+        logger.warning(error_msg)
+        return {"status": "error", "message": error_msg}
+
     current_profile = get_user_profile(user_id)
+    if isinstance(current_profile, dict) and current_profile.get("status") == "error":
+        return current_profile
     
     # Merge fields
     for k, v in fields.items():
@@ -166,11 +245,16 @@ def update_user_profile(user_id: str, fields: dict) -> dict:
         except Exception as e:
             logger.error(f"Firestore update_user_profile failed: {e}")
 
-    # Local JSON Fallback
-    data = _read_local_db()
-    data["users"][user_id] = current_profile
-    _write_local_db(data)
-    return current_profile
+    try:
+        # Local JSON Fallback
+        data = _read_local_db()
+        data["users"][user_id] = current_profile
+        _write_local_db(data)
+        return current_profile
+    except Exception as fallback_err:
+        error_msg = f"Database Write Error: {fallback_err}. Unable to save profile to backup local storage."
+        logger.error(error_msg)
+        return {"status": "error", "message": error_msg}
 
 # -------------------------------------------------------------
 # Nutrition Log Operations
@@ -188,6 +272,22 @@ def save_nutrition_log(user_id: str, date: str, meal_type: str, description: str
         carbs_g: Grams of carbohydrates (optional).
         fat_g: Grams of fat (optional).
     """
+    try:
+        SaveNutritionLogInput(
+            user_id=user_id,
+            date=date,
+            meal_type=meal_type,
+            description=description,
+            calories=calories,
+            protein_g=protein_g,
+            carbs_g=carbs_g,
+            fat_g=fat_g
+        )
+    except ValidationError as ve:
+        error_msg = f"Argument Validation Error: {ve}. Please correct the parameters and call the tool again with valid inputs."
+        logger.warning(error_msg)
+        return {"status": "error", "message": error_msg}
+
     log_entry = {
         "userId": user_id,
         "date": date,
@@ -212,13 +312,18 @@ def save_nutrition_log(user_id: str, date: str, meal_type: str, description: str
         except Exception as e:
             logger.error(f"Firestore save_nutrition_log failed: {e}")
 
-    # Local JSON Fallback
-    data = _read_local_db()
-    log_id = f"log_{int(datetime.utcnow().timestamp() * 1000)}"
-    log_entry["logId"] = log_id
-    data["nutrition_logs"].append(log_entry)
-    _write_local_db(data)
-    return log_entry
+    try:
+        # Local JSON Fallback
+        data = _read_local_db()
+        log_id = f"log_{int(datetime.utcnow().timestamp() * 1000)}"
+        log_entry["logId"] = log_id
+        data["nutrition_logs"].append(log_entry)
+        _write_local_db(data)
+        return log_entry
+    except Exception as fallback_err:
+        error_msg = f"Database Write Error: {fallback_err}. Unable to save nutrition log to backup local storage."
+        logger.error(error_msg)
+        return {"status": "error", "message": error_msg}
 
 
 def get_daily_intake(user_id: str, date: str) -> dict:
@@ -228,6 +333,13 @@ def get_daily_intake(user_id: str, date: str) -> dict:
         user_id: Unique identifier for the user.
         date: Date string formatted as 'YYYY-MM-DD'.
     """
+    try:
+        GetDailyIntakeInput(user_id=user_id, date=date)
+    except ValidationError as ve:
+        error_msg = f"Argument Validation Error: {ve}. Please correct the parameters and call the tool again with valid inputs."
+        logger.warning(error_msg)
+        return {"status": "error", "message": error_msg}
+
     total_calories = 0
     total_protein = 0
     total_carbs = 0
@@ -263,26 +375,31 @@ def get_daily_intake(user_id: str, date: str) -> dict:
         except Exception as e:
             logger.error(f"Firestore get_daily_intake failed: {e}")
 
-    # Local JSON Fallback
-    data = _read_local_db()
-    for entry in data["nutrition_logs"]:
-        if entry["userId"] == user_id and entry["date"] == date:
-            nutrients = entry.get("nutrients", {})
-            total_calories += nutrients.get("calories", 0)
-            total_protein += nutrients.get("proteinGrams", 0)
-            total_carbs += nutrients.get("carbsGrams", 0)
-            total_fat += nutrients.get("fatGrams", 0)
-            meals.append({
-                "mealType": entry.get("mealType"),
-                "description": entry.get("description"),
-                "calories": nutrients.get("calories", 0)
-            })
+    try:
+        # Local JSON Fallback
+        data = _read_local_db()
+        for entry in data["nutrition_logs"]:
+            if entry["userId"] == user_id and entry["date"] == date:
+                nutrients = entry.get("nutrients", {})
+                total_calories += nutrients.get("calories", 0)
+                total_protein += nutrients.get("proteinGrams", 0)
+                total_carbs += nutrients.get("carbsGrams", 0)
+                total_fat += nutrients.get("fatGrams", 0)
+                meals.append({
+                    "mealType": entry.get("mealType"),
+                    "description": entry.get("description"),
+                    "calories": nutrients.get("calories", 0)
+                })
 
-    return {
-        "date": date,
-        "total_calories": total_calories,
-        "total_protein": total_protein,
-        "total_carbs": total_carbs,
-        "total_fat": total_fat,
-        "meals": meals
-    }
+        return {
+            "date": date,
+            "total_calories": total_calories,
+            "total_protein": total_protein,
+            "total_carbs": total_carbs,
+            "total_fat": total_fat,
+            "meals": meals
+        }
+    except Exception as fallback_err:
+        error_msg = f"Database Read Error: {fallback_err}. Unable to load daily intake from backup local storage."
+        logger.error(error_msg)
+        return {"status": "error", "message": error_msg}
