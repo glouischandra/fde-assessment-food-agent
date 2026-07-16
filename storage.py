@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 from datetime import datetime
 from google.cloud import firestore
 from pydantic import BaseModel, Field, field_validator, ValidationError
@@ -67,10 +68,19 @@ class GetDailyIntakeInput(BaseModel):
         return v
 
 # -------------------------------------------------------------
-# Firestore / JSON Database Client Initialization
+# Firestore Client Proxy (Async Loop Resilience)
 # -------------------------------------------------------------
 FIRESTORE_AVAILABLE = False
-db = None
+project_id_global = None
+
+class AsyncClientProxy:
+    def __getattr__(self, name):
+        if not FIRESTORE_AVAILABLE or not project_id_global:
+            raise RuntimeError("Firestore is not available or not initialized.")
+        client = firestore.AsyncClient(project=project_id_global)
+        return getattr(client, name)
+
+db = AsyncClientProxy()
 
 # Attempt to initialize Firestore Client
 try:
@@ -78,6 +88,7 @@ try:
     from google.auth.transport.requests import Request
     
     credentials, project_id = google.auth.default()
+    project_id_global = project_id
     
     # Determine the execution identity
     identity = "Unknown Identity"
@@ -116,19 +127,19 @@ try:
     logger.info(f"[Initialization] Project ID: {project_id}")
     logger.info(f"[Initialization] Service Account / Identity: {identity}")
     
-    # Initialize Firestore Client
-    db = firestore.Client(project=project_id)
-    # Perform a quick read check to verify connectivity and credentials
-    db.collection("users").document("connectivity_test_doc_ref").get()
+    # Perform a quick read check synchronously to check connectivity
+    sync_db = firestore.Client(project=project_id)
+    sync_db.collection("users").document("connectivity_test_doc_ref").get()
+    
     FIRESTORE_AVAILABLE = True
-    logger.info("Firestore client initialized successfully.")
+    logger.info("Firestore async client proxy initialized successfully.")
 except Exception as e:
     logger.warning(f"Firestore not available, falling back to local JSON persistence: {e}")
     FIRESTORE_AVAILABLE = False
 
 LOCAL_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "local_db.json")
 
-def _read_local_db() -> dict:
+def _read_local_db_sync() -> dict:
     if not os.path.exists(LOCAL_DB_PATH):
         return {"users": {}, "nutrition_logs": []}
     try:
@@ -137,7 +148,7 @@ def _read_local_db() -> dict:
     except Exception:
         return {"users": {}, "nutrition_logs": []}
 
-def _write_local_db(data: dict):
+def _write_local_db_sync(data: dict):
     try:
         with open(LOCAL_DB_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
@@ -145,9 +156,9 @@ def _write_local_db(data: dict):
         logger.error(f"Failed to write to local DB: {e}")
 
 # -------------------------------------------------------------
-# User Profile Operations (Synchronous)
+# User Profile Operations (Async)
 # -------------------------------------------------------------
-def get_user_profile(user_id: str) -> dict:
+async def get_user_profile(user_id: str) -> dict:
     """Fetches the user's profile, including dietary restrictions, cuisine preferences, and D.C. location.
 
     Args:
@@ -181,7 +192,7 @@ def get_user_profile(user_id: str) -> dict:
     if FIRESTORE_AVAILABLE:
         try:
             doc_ref = db.collection("users").document(user_id)
-            doc = doc_ref.get()
+            doc = await doc_ref.get()
             if doc.exists:
                 profile = doc.to_dict()
                 # Ensure all default keys exist
@@ -190,14 +201,14 @@ def get_user_profile(user_id: str) -> dict:
                         profile[k] = v
                 return profile
             else:
-                doc_ref.set(default_profile)
+                await doc_ref.set(default_profile)
                 return default_profile
         except Exception as e:
             logger.error(f"Firestore get_user_profile failed: {e}")
 
     try:
         # Local JSON Fallback
-        data = _read_local_db()
+        data = await asyncio.to_thread(_read_local_db_sync)
         if user_id in data["users"]:
             profile = data["users"][user_id]
             for k, v in default_profile.items():
@@ -206,7 +217,7 @@ def get_user_profile(user_id: str) -> dict:
             return profile
         else:
             data["users"][user_id] = default_profile
-            _write_local_db(data)
+            await asyncio.to_thread(_write_local_db_sync, data)
             return default_profile
     except Exception as fallback_err:
         error_msg = f"Database Read Error: {fallback_err}. Unable to retrieve profile from backup local storage."
@@ -214,7 +225,7 @@ def get_user_profile(user_id: str) -> dict:
         return {"status": "error", "message": error_msg}
 
 
-def update_user_profile(user_id: str, fields: dict) -> dict:
+async def update_user_profile(user_id: str, fields: dict) -> dict:
     """Updates the user's profile in Firestore (e.g., changes preferences or calorie targets).
 
     Args:
@@ -228,7 +239,7 @@ def update_user_profile(user_id: str, fields: dict) -> dict:
         logger.warning(error_msg)
         return {"status": "error", "message": error_msg}
 
-    current_profile = get_user_profile(user_id)
+    current_profile = await get_user_profile(user_id)
     if isinstance(current_profile, dict) and current_profile.get("status") == "error":
         return current_profile
     
@@ -241,16 +252,16 @@ def update_user_profile(user_id: str, fields: dict) -> dict:
 
     if FIRESTORE_AVAILABLE:
         try:
-            db.collection("users").document(user_id).set(current_profile)
+            await db.collection("users").document(user_id).set(current_profile)
             return current_profile
         except Exception as e:
             logger.error(f"Firestore update_user_profile failed: {e}")
 
     try:
         # Local JSON Fallback
-        data = _read_local_db()
+        data = await asyncio.to_thread(_read_local_db_sync)
         data["users"][user_id] = current_profile
-        _write_local_db(data)
+        await asyncio.to_thread(_write_local_db_sync, data)
         return current_profile
     except Exception as fallback_err:
         error_msg = f"Database Write Error: {fallback_err}. Unable to save profile to backup local storage."
@@ -258,9 +269,9 @@ def update_user_profile(user_id: str, fields: dict) -> dict:
         return {"status": "error", "message": error_msg}
 
 # -------------------------------------------------------------
-# Nutrition Log Operations (Synchronous)
+# Nutrition Log Operations (Async)
 # -------------------------------------------------------------
-def save_nutrition_log(user_id: str, date: str, meal_type: str, description: str, calories: int, protein_g: int = 0, carbs_g: int = 0, fat_g: int = 0) -> dict:
+async def save_nutrition_log(user_id: str, date: str, meal_type: str, description: str, calories: int, protein_g: int = 0, carbs_g: int = 0, fat_g: int = 0) -> dict:
     """Logs a meal consumed by the user.
 
     Args:
@@ -306,7 +317,7 @@ def save_nutrition_log(user_id: str, date: str, meal_type: str, description: str
     if FIRESTORE_AVAILABLE:
         try:
             doc_ref = db.collection("nutrition_logs").document()
-            doc_ref.set(log_entry)
+            await doc_ref.set(log_entry)
             result = log_entry.copy()
             result["logId"] = doc_ref.id
             return result
@@ -315,11 +326,11 @@ def save_nutrition_log(user_id: str, date: str, meal_type: str, description: str
 
     try:
         # Local JSON Fallback
-        data = _read_local_db()
+        data = await asyncio.to_thread(_read_local_db_sync)
         log_id = f"log_{int(datetime.utcnow().timestamp() * 1000)}"
         log_entry["logId"] = log_id
         data["nutrition_logs"].append(log_entry)
-        _write_local_db(data)
+        await asyncio.to_thread(_write_local_db_sync, data)
         return log_entry
     except Exception as fallback_err:
         error_msg = f"Database Write Error: {fallback_err}. Unable to save nutrition log to backup local storage."
@@ -327,7 +338,7 @@ def save_nutrition_log(user_id: str, date: str, meal_type: str, description: str
         return {"status": "error", "message": error_msg}
 
 
-def get_daily_intake(user_id: str, date: str) -> dict:
+async def get_daily_intake(user_id: str, date: str) -> dict:
     """Aggregates all nutrition logs for a given user on a specific date.
 
     Args:
@@ -353,7 +364,7 @@ def get_daily_intake(user_id: str, date: str) -> dict:
                      .where("userId", "==", user_id)\
                      .where("date", "==", date)\
                      .stream()
-            for doc in logs:
+            async for doc in logs:
                 data = doc.to_dict()
                 nutrients = data.get("nutrients", {})
                 total_calories += nutrients.get("calories", 0)
@@ -378,7 +389,7 @@ def get_daily_intake(user_id: str, date: str) -> dict:
 
     try:
         # Local JSON Fallback
-        data = _read_local_db()
+        data = await asyncio.to_thread(_read_local_db_sync)
         for entry in data["nutrition_logs"]:
             if entry["userId"] == user_id and entry["date"] == date:
                 nutrients = entry.get("nutrients", {})

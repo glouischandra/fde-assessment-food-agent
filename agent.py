@@ -63,7 +63,8 @@ nutrition_tracker = Agent(
         "You can check their current aggregated intake for the day using the `get_daily_intake` tool. "
         "Always cross-reference the user's target calorie limit from their profile (retrieved via `get_user_profile`). "
         "Calculate the daily calories consumed and remaining. "
-        "Once completed, return the structured result by calling the `finish_task` tool."
+        "Once completed, return the structured result by calling the `finish_task` tool. "
+        "CRITICAL: Call the `finish_task` tool directly. Never wrap your tool call inside a Python print() statement, python markdown block, or code block."
     ),
     tools=[get_user_profile, save_nutrition_log, get_daily_intake]
 )
@@ -82,7 +83,8 @@ profile_manager = Agent(
         "including daily calorie goals, dietary restrictions, and cuisine preferences (e.g. Asian, American, French). "
         "Use the `get_user_profile` tool to read the current profile, and `update_user_profile` to update specific fields. "
         "You can update cuisine interests on a scale from 0.0 to 1.0. "
-        "Once completed, return the structured result by calling the `finish_task` tool."
+        "Once completed, return the structured result by calling the `finish_task` tool. "
+        "CRITICAL: Call the `finish_task` tool directly. Never wrap your tool call inside a Python print() statement, python markdown block, or code block."
     ),
     tools=[get_user_profile, update_user_profile]
 )
@@ -106,7 +108,8 @@ meal_searcher = Agent(
         "   - For restaurant searches: Use `google_search_restaurants` with the user's preferred cuisine and neighborhood. "
         "     Estimate or analyze the calorie counts of dishes using `analyze_menu_nutrition`. "
         "   - For recipes: Generate a recipe tailored to their cuisine preferences, dietary restrictions, and remaining calories. "
-        "Once completed, return the structured result by calling the `finish_task` tool."
+        "Once completed, return the structured result by calling the `finish_task` tool. "
+        "CRITICAL: Call the `finish_task` tool directly. Never wrap your tool call inside a Python print() statement, python markdown block, or code block."
     ),
     tools=[get_user_profile, get_daily_intake, google_search_restaurants, analyze_menu_nutrition]
 )

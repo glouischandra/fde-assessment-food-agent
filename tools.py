@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 from pydantic import BaseModel, Field, field_validator, ValidationError
 from typing import Literal
 
@@ -53,9 +54,9 @@ except ImportError:
     from constants import DC_RESTAURANTS
 
 # -------------------------------------------------------------
-# Google Search Fallback / D.C. Restaurant Database (Synchronous Tools)
+# Google Search Fallback / D.C. Restaurant Database (Async Tools)
 # -------------------------------------------------------------
-def google_search_restaurants(query: str, neighborhood: str = "Washington D.C.") -> dict:
+async def google_search_restaurants(query: str, neighborhood: str = "Washington D.C.") -> dict:
     """Queries Google Search (or uses the local D.C. restaurant database) to suggest restaurants matching cuisine and neighborhood.
 
     Args:
@@ -107,7 +108,7 @@ def google_search_restaurants(query: str, neighborhood: str = "Washington D.C.")
         return {"status": "error", "message": error_msg}
 
 
-def analyze_menu_nutrition(restaurant_name: str, dish_description: str) -> dict:
+async def analyze_menu_nutrition(restaurant_name: str, dish_description: str) -> dict:
     """Estimates the calories and macronutrients of a restaurant dish.
 
     Args:
