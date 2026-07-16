@@ -140,6 +140,35 @@ class CustomRootAgent(Agent):
         async for event in super()._run_impl(ctx=ctx, node_input=node_input):
             yield event
 
+from .trace_logging import logger
+from google.adk.apps.app import App, EventsCompactionConfig
+from google.adk.apps.compaction import _run_compaction_for_sliding_window
+from google.adk.agents.callback_context import CallbackContext
+
+compaction_config = EventsCompactionConfig(
+    compaction_interval=3,  # Trigger compaction every 3 turns
+    overlap_size=1,        # Keep 1 turn of history for overlap context
+)
+
+async def run_compaction_bg(session, session_service):
+    from copy import copy
+    temp_app = copy(app)
+    temp_app.events_compaction_config = compaction_config
+    try:
+        await _run_compaction_for_sliding_window(
+            app=temp_app,
+            session=session,
+            session_service=session_service,
+        )
+        logger.info("Background sliding window event compaction completed successfully.")
+    except Exception as e:
+        logger.error(f"Background event compaction failed: {e}")
+
+async def async_compaction_callback(ctx: CallbackContext):
+    inv_ctx = ctx._invocation_context
+    # Run the compaction as a non-blocking background task.
+    asyncio.create_task(run_compaction_bg(inv_ctx.session, inv_ctx.session_service))
+
 root_agent = CustomRootAgent(
     model=ORCHESTRATOR_MODEL,
     name='root_agent',
@@ -153,19 +182,12 @@ root_agent = CustomRootAgent(
         "Provide the user request to the sub-agent as the input argument. "
         "Once the sub-agent returns its structured output, summarize the result nicely for the user."
     ),
+    after_agent_callback=[async_compaction_callback],
     sub_agents=[nutrition_tracker, profile_manager, meal_searcher]
 )
 
-# -------------------------------------------------------------
-# 5. App Orchestration with Memory Event Compaction
-# -------------------------------------------------------------
-from google.adk.apps.app import App, EventsCompactionConfig
-
+# App Orchestration (Compaction is offloaded to the callback above to execute in background)
 app = App(
     name="food_agent",
     root_agent=root_agent,
-    events_compaction_config=EventsCompactionConfig(
-        compaction_interval=3,  # Trigger compaction every 3 turns
-        overlap_size=1,        # Keep 1 turn of history for overlap context
-    )
 )
