@@ -53,7 +53,10 @@ try:
 except ImportError:
     from constants import DC_RESTAURANTS
 
-def google_search_restaurants(query: str, neighborhood: str = "Washington D.C.") -> dict:
+# -------------------------------------------------------------
+# Google Search Fallback / D.C. Restaurant Database (Async Tools)
+# -------------------------------------------------------------
+async def google_search_restaurants(query: str, neighborhood: str = "Washington D.C.") -> dict:
     """Queries Google Search (or uses the local D.C. restaurant database) to suggest restaurants matching cuisine and neighborhood.
 
     Args:
@@ -105,7 +108,7 @@ def google_search_restaurants(query: str, neighborhood: str = "Washington D.C.")
         return {"status": "error", "message": error_msg}
 
 
-def analyze_menu_nutrition(restaurant_name: str, dish_description: str) -> dict:
+async def analyze_menu_nutrition(restaurant_name: str, dish_description: str) -> dict:
     """Estimates the calories and macronutrients of a restaurant dish.
 
     Args:
