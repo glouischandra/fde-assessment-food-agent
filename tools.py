@@ -67,7 +67,14 @@ async def google_search_restaurants(query: str, neighborhood: str = "Washington 
         GoogleSearchRestaurantsInput(query=query, neighborhood=neighborhood)
     except ValidationError as ve:
         error_msg = f"Argument Validation Error: {ve}. Please correct the parameters and call the tool again with valid inputs."
-        logger.warning(error_msg)
+        logger.warning(
+            "Argument validation failed for restaurant search",
+            extra={
+                "error.message": error_msg,
+                "query": query,
+                "neighborhood": neighborhood
+            }
+        )
         return {"status": "error", "message": error_msg}
 
     query_lower = query.lower()
@@ -104,7 +111,15 @@ async def google_search_restaurants(query: str, neighborhood: str = "Washington 
         }
     except Exception as search_err:
         error_msg = f"Search Execution Error: {search_err}. Unable to parse results from the restaurant database."
-        logger.error(error_msg)
+        logger.error(
+            "Search execution failed",
+            exc_info=True,
+            extra={
+                "error.message": error_msg,
+                "query": query,
+                "neighborhood": neighborhood
+            }
+        )
         return {"status": "error", "message": error_msg}
 
 
@@ -119,7 +134,14 @@ async def analyze_menu_nutrition(restaurant_name: str, dish_description: str) ->
         AnalyzeMenuNutritionInput(restaurant_name=restaurant_name, dish_description=dish_description)
     except ValidationError as ve:
         error_msg = f"Argument Validation Error: {ve}. Please correct the parameters and call the tool again with valid inputs."
-        logger.warning(error_msg)
+        logger.warning(
+            "Argument validation failed for menu nutrition analysis",
+            extra={
+                "error.message": error_msg,
+                "restaurant_name": restaurant_name,
+                "dish_description": dish_description
+            }
+        )
         return {"status": "error", "message": error_msg}
 
     try:
@@ -152,5 +174,13 @@ async def analyze_menu_nutrition(restaurant_name: str, dish_description: str) ->
         }
     except Exception as analysis_err:
         error_msg = f"Nutrition Analysis Error: {analysis_err}. Unable to estimate nutritional values."
-        logger.error(error_msg)
+        logger.error(
+            "Menu nutrition analysis failed",
+            exc_info=True,
+            extra={
+                "error.message": error_msg,
+                "restaurant_name": restaurant_name,
+                "dish_description": dish_description
+            }
+        )
         return {"status": "error", "message": error_msg}

@@ -4,3 +4,5 @@ google-adk[a2a]==2.3.0
 vertexai
 google-cloud-firestore
 pydantic
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0

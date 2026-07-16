@@ -3,8 +3,7 @@ import logging
 from datetime import datetime, timedelta
 from google.cloud import firestore
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("seed_db")
+from trace_logging import logger
 
 # -------------------------------------------------------------
 # Define Seed Data
@@ -125,23 +124,30 @@ SEED_LOGS = [
 
 def seed_database():
     project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "glouischandra-demo")
-    logger.info(f"Connecting to Firestore project: {project_id}...")
+    logger.info("Connecting to Firestore project", extra={"project_id": project_id})
     
     try:
         db = firestore.Client(project=project_id)
     except Exception as e:
-        logger.error(f"Failed to connect to Firestore: {e}")
+        logger.error(
+            "Failed to connect to Firestore during seeding",
+            exc_info=True,
+            extra={"error.message": str(e), "project_id": project_id}
+        )
         return
 
     # Seed Users
-    logger.info("Seeding users collection...")
+    logger.info("Seeding users collection")
     for user_data in SEED_USERS:
         user_id = user_data["userId"]
         db.collection("users").document(user_id).set(user_data)
-        logger.info(f"  Added/Updated user: {user_id} ({user_data['name']})")
+        logger.info(
+            "Added/Updated user profile in database",
+            extra={"user_id": user_id, "user_name": user_data["name"]}
+        )
 
     # Seed Logs
-    logger.info("Seeding nutrition_logs collection...")
+    logger.info("Seeding nutrition_logs collection")
     # First, let's clean up existing mock logs for these seed users to keep it clean
     for user_data in SEED_USERS:
         uid = user_data["userId"]
@@ -152,9 +158,17 @@ def seed_database():
     for log_data in SEED_LOGS:
         doc_ref = db.collection("nutrition_logs").document()
         doc_ref.set(log_data)
-        logger.info(f"  Logged {log_data['mealType']} for {log_data['userId']}: {log_data['description']}")
+        logger.info(
+            "Added/Updated nutrition log entry in database",
+            extra={
+                "user_id": log_data["userId"],
+                "meal_type": log_data["mealType"],
+                "description": log_data["description"],
+                "calories": log_data["nutrients"]["calories"]
+            }
+        )
 
-    logger.info("Database seeding completed successfully!")
+    logger.info("Database seeding completed successfully")
 
 if __name__ == "__main__":
     seed_database()

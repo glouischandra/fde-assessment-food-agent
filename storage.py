@@ -122,19 +122,23 @@ try:
         "service_account_email": getattr(credentials, "service_account_email", None),
         "project_id": getattr(credentials, "project_id", None),
     }
-    logger.info(f"credentials data: {json.dumps(creds_dict, indent=2)}")
+    logger.info("Loaded credentials data", extra={"credentials": creds_dict})
             
-    logger.info(f"[Initialization] Project ID: {project_id}")
-    logger.info(f"[Initialization] Service Account / Identity: {identity}")
+    logger.info("Initializing Firestore client", extra={"project_id": project_id})
+    logger.info("Firestore client identity verified", extra={"identity": identity})
     
     # Perform a quick read check synchronously to check connectivity
     sync_db = firestore.Client(project=project_id)
     sync_db.collection("users").document("connectivity_test_doc_ref").get()
     
     FIRESTORE_AVAILABLE = True
-    logger.info("Firestore async client proxy initialized successfully.")
+    logger.info("Firestore async client proxy initialized successfully")
 except Exception as e:
-    logger.warning(f"Firestore not available, falling back to local JSON persistence: {e}")
+    logger.warning(
+        "Firestore not available, falling back to local JSON persistence",
+        exc_info=True,
+        extra={"error.message": str(e)}
+    )
     FIRESTORE_AVAILABLE = False
 
 LOCAL_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "local_db.json")
@@ -153,7 +157,11 @@ def _write_local_db_sync(data: dict):
         with open(LOCAL_DB_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
     except Exception as e:
-        logger.error(f"Failed to write to local DB: {e}")
+        logger.error(
+            "Failed to write to local DB",
+            exc_info=True,
+            extra={"error.message": str(e)}
+        )
 
 # -------------------------------------------------------------
 # User Profile Operations (Async)
@@ -168,7 +176,10 @@ async def get_user_profile(user_id: str) -> dict:
         GetUserProfileInput(user_id=user_id)
     except ValidationError as ve:
         error_msg = f"Argument Validation Error: {ve}. Please correct the parameters and call the tool again with valid inputs."
-        logger.warning(error_msg)
+        logger.warning(
+            "Argument validation failed for get_user_profile",
+            extra={"error.message": error_msg, "user_id": user_id}
+        )
         return {"status": "error", "message": error_msg}
 
     default_profile = {
@@ -204,7 +215,11 @@ async def get_user_profile(user_id: str) -> dict:
                 await doc_ref.set(default_profile)
                 return default_profile
         except Exception as e:
-            logger.error(f"Firestore get_user_profile failed: {e}")
+            logger.error(
+                "Firestore get_user_profile failed",
+                exc_info=True,
+                extra={"error.message": str(e), "user_id": user_id}
+            )
 
     try:
         # Local JSON Fallback
@@ -221,7 +236,11 @@ async def get_user_profile(user_id: str) -> dict:
             return default_profile
     except Exception as fallback_err:
         error_msg = f"Database Read Error: {fallback_err}. Unable to retrieve profile from backup local storage."
-        logger.error(error_msg)
+        logger.error(
+            "Database read error during profile retrieval fallback",
+            exc_info=True,
+            extra={"error.message": error_msg, "user_id": user_id}
+        )
         return {"status": "error", "message": error_msg}
 
 
@@ -236,7 +255,10 @@ async def update_user_profile(user_id: str, fields: dict) -> dict:
         UpdateUserProfileInput(user_id=user_id, fields=fields)
     except ValidationError as ve:
         error_msg = f"Argument Validation Error: {ve}. Please correct the parameters and call the tool again with valid inputs."
-        logger.warning(error_msg)
+        logger.warning(
+            "Argument validation failed for update_user_profile",
+            extra={"error.message": error_msg, "user_id": user_id, "fields": fields}
+        )
         return {"status": "error", "message": error_msg}
 
     current_profile = await get_user_profile(user_id)
@@ -255,7 +277,11 @@ async def update_user_profile(user_id: str, fields: dict) -> dict:
             await db.collection("users").document(user_id).set(current_profile)
             return current_profile
         except Exception as e:
-            logger.error(f"Firestore update_user_profile failed: {e}")
+            logger.error(
+                "Firestore update_user_profile failed",
+                exc_info=True,
+                extra={"error.message": str(e), "user_id": user_id, "fields": fields}
+            )
 
     try:
         # Local JSON Fallback
@@ -265,7 +291,11 @@ async def update_user_profile(user_id: str, fields: dict) -> dict:
         return current_profile
     except Exception as fallback_err:
         error_msg = f"Database Write Error: {fallback_err}. Unable to save profile to backup local storage."
-        logger.error(error_msg)
+        logger.error(
+            "Database write error during profile update fallback",
+            exc_info=True,
+            extra={"error.message": error_msg, "user_id": user_id, "fields": fields}
+        )
         return {"status": "error", "message": error_msg}
 
 # -------------------------------------------------------------
@@ -297,7 +327,20 @@ async def save_nutrition_log(user_id: str, date: str, meal_type: str, descriptio
         )
     except ValidationError as ve:
         error_msg = f"Argument Validation Error: {ve}. Please correct the parameters and call the tool again with valid inputs."
-        logger.warning(error_msg)
+        logger.warning(
+            "Argument validation failed for save_nutrition_log",
+            extra={
+                "error.message": error_msg,
+                "user_id": user_id,
+                "date": date,
+                "meal_type": meal_type,
+                "description": description,
+                "calories": calories,
+                "protein_g": protein_g,
+                "carbs_g": carbs_g,
+                "fat_g": fat_g
+            }
+        )
         return {"status": "error", "message": error_msg}
 
     log_entry = {
@@ -322,7 +365,18 @@ async def save_nutrition_log(user_id: str, date: str, meal_type: str, descriptio
             result["logId"] = doc_ref.id
             return result
         except Exception as e:
-            logger.error(f"Firestore save_nutrition_log failed: {e}")
+            logger.error(
+                "Firestore save_nutrition_log failed",
+                exc_info=True,
+                extra={
+                    "error.message": str(e),
+                    "user_id": user_id,
+                    "date": date,
+                    "meal_type": meal_type,
+                    "description": description,
+                    "calories": calories
+                }
+            )
 
     try:
         # Local JSON Fallback
@@ -334,7 +388,18 @@ async def save_nutrition_log(user_id: str, date: str, meal_type: str, descriptio
         return log_entry
     except Exception as fallback_err:
         error_msg = f"Database Write Error: {fallback_err}. Unable to save nutrition log to backup local storage."
-        logger.error(error_msg)
+        logger.error(
+            "Database write error during nutrition log fallback",
+            exc_info=True,
+            extra={
+                "error.message": error_msg,
+                "user_id": user_id,
+                "date": date,
+                "meal_type": meal_type,
+                "description": description,
+                "calories": calories
+            }
+        )
         return {"status": "error", "message": error_msg}
 
 
@@ -349,7 +414,10 @@ async def get_daily_intake(user_id: str, date: str) -> dict:
         GetDailyIntakeInput(user_id=user_id, date=date)
     except ValidationError as ve:
         error_msg = f"Argument Validation Error: {ve}. Please correct the parameters and call the tool again with valid inputs."
-        logger.warning(error_msg)
+        logger.warning(
+            "Argument validation failed for get_daily_intake",
+            extra={"error.message": error_msg, "user_id": user_id, "date": date}
+        )
         return {"status": "error", "message": error_msg}
 
     total_calories = 0
@@ -385,7 +453,11 @@ async def get_daily_intake(user_id: str, date: str) -> dict:
                 "meals": meals
             }
         except Exception as e:
-            logger.error(f"Firestore get_daily_intake failed: {e}")
+            logger.error(
+                "Firestore get_daily_intake failed",
+                exc_info=True,
+                extra={"error.message": str(e), "user_id": user_id, "date": date}
+            )
 
     try:
         # Local JSON Fallback
@@ -413,5 +485,9 @@ async def get_daily_intake(user_id: str, date: str) -> dict:
         }
     except Exception as fallback_err:
         error_msg = f"Database Read Error: {fallback_err}. Unable to load daily intake from backup local storage."
-        logger.error(error_msg)
+        logger.error(
+            "Database read error during daily nutrition log retrieval fallback",
+            exc_info=True,
+            extra={"error.message": error_msg, "user_id": user_id, "date": date}
+        )
         return {"status": "error", "message": error_msg}
