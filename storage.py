@@ -60,7 +60,7 @@ try:
     
     db = firestore.Client(project=project_id)
     # Perform a quick read check to verify connectivity and credentials
-    db.collection("users").document("connectivity_test_doc_ref").get()
+    db.collection("users").get()
     FIRESTORE_AVAILABLE = True
     logger.info("Firestore client initialized successfully.")
 except Exception as e:
