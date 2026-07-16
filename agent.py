@@ -1,4 +1,6 @@
 from google.adk.agents.llm_agent import Agent
+from google.adk.models.google_llm import Gemini
+from google.genai import types
 from pydantic import BaseModel, Field
 from typing import Literal, List, Dict, Optional
 from .tools import (
@@ -9,6 +11,17 @@ from .tools import (
     google_search_restaurants,
     analyze_menu_nutrition
 )
+
+# Configure retry options for Vertex AI Gemini calls (for robust 429 rate limit mitigation)
+retry_config = types.HttpRetryOptions(
+    attempts=5,        # Maximum retry attempts
+    exp_base=7,        # Exponential backoff base
+    initial_delay=1,   # Starting delay in seconds
+    http_status_codes=[429, 500, 503, 504], # Retry on these HTTP errors
+)
+
+ORCHESTRATOR_MODEL = Gemini(model='gemini-2.5-pro', retry_options=retry_config)
+TASK_MODEL = Gemini(model='gemini-2.5-flash-lite', retry_options=retry_config)
 
 # -------------------------------------------------------------
 # Structured Output Schemas for Task Sub-Agents
@@ -38,7 +51,7 @@ class MealSearcherResult(BaseModel):
 # 1. Nutrition Tracker Sub-Agent (Task Mode)
 # -------------------------------------------------------------
 nutrition_tracker = Agent(
-    model='gemini-2.5-flash-lite',
+    model=TASK_MODEL,
     name='nutrition_tracker',
     description='Specializes in logging user food intake, estimating calories, and checking daily nutrition totals.',
     mode='task',
@@ -59,7 +72,7 @@ nutrition_tracker = Agent(
 # 2. Preference Profiler / Profile Manager Sub-Agent (Task Mode)
 # -------------------------------------------------------------
 profile_manager = Agent(
-    model='gemini-2.5-flash-lite',
+    model=TASK_MODEL,
     name='profile_manager',
     description='Specializes in updating and retrieving user profiles, cuisine interests (Asian, American, French), and dietary restrictions.',
     mode='task',
@@ -78,7 +91,7 @@ profile_manager = Agent(
 # 3. Meal & Restaurant Search Sub-Agent (Task Mode)
 # -------------------------------------------------------------
 meal_searcher = Agent(
-    model='gemini-2.5-flash-lite',
+    model=ORCHESTRATOR_MODEL,
     name='meal_searcher',
     description='Specializes in recommending recipes or finding D.C. area restaurants that fit within the user\'s daily calorie limit.',
     mode='task',
@@ -102,7 +115,7 @@ meal_searcher = Agent(
 # 4. Main Orchestrator Agent (Root Agent)
 # -------------------------------------------------------------
 root_agent = Agent(
-    model='gemini-2.5-flash-lite',
+    model=ORCHESTRATOR_MODEL,
     name='root_agent',
     description='Core Food & Nutrition Assistant that coordinates logging, profile updates, and meal searches.',
     instruction=(
