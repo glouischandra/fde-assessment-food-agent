@@ -51,7 +51,7 @@ class MealSearcherResult(BaseModel):
 # 1. Nutrition Tracker Sub-Agent (Task Mode)
 # -------------------------------------------------------------
 nutrition_tracker = Agent(
-    model=ORCHESTRATOR_MODEL,
+    model=TASK_MODEL,
     name='nutrition_tracker',
     description='Specializes in logging user food intake, estimating calories, and checking daily nutrition totals.',
     mode='task',
@@ -78,7 +78,7 @@ nutrition_tracker = Agent(
 # 2. Preference Profiler / Profile Manager Sub-Agent (Task Mode)
 # -------------------------------------------------------------
 profile_manager = Agent(
-    model=ORCHESTRATOR_MODEL,
+    model=TASK_MODEL,
     name='profile_manager',
     description='Specializes in updating and retrieving user profiles, cuisine interests (Asian, American, French), and dietary restrictions.',
     mode='task',
