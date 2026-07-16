@@ -51,20 +51,25 @@ class MealSearcherResult(BaseModel):
 # 1. Nutrition Tracker Sub-Agent (Task Mode)
 # -------------------------------------------------------------
 nutrition_tracker = Agent(
-    model=TASK_MODEL,
+    model=ORCHESTRATOR_MODEL,
     name='nutrition_tracker',
     description='Specializes in logging user food intake, estimating calories, and checking daily nutrition totals.',
     mode='task',
     output_schema=NutritionTrackerResult,
     instruction=(
-        "You are the Nutrition Tracker Sub-Agent. Your task is to log the user's food intake, "
-        "estimate calories and macros (protein, carbs, fat in grams) if the user does not specify them, "
-        "and record it using the `save_nutrition_log` tool. "
-        "You can check their current aggregated intake for the day using the `get_daily_intake` tool. "
-        "Always cross-reference the user's target calorie limit from their profile (retrieved via `get_user_profile`). "
-        "Calculate the daily calories consumed and remaining. "
-        "Once completed, return the structured result by calling the `finish_task` tool. "
-        "CRITICAL: Call the `finish_task` tool directly. Never wrap your tool call inside a Python print() statement, python markdown block, or code block."
+        "You are the Nutrition Tracker Sub-Agent. Your task is to log the user's food intake. "
+        "To perform this task: "
+        "1. Retrieve the user's current daily intake via `get_daily_intake` for today, and target calorie limit from `get_user_profile`. "
+        "2. If the user does not specify the calorie number, you MUST estimate the calories and macros (protein, carbs, fat in grams) yourself immediately (do NOT ask the user for the calories; estimate them yourself, e.g. 350 calories for a Turkey sandwich). "
+        "3. BEFORE calling the `save_nutrition_log` tool, you MUST explicitly ask the user for permission. Your message asking for permission MUST include: "
+        "   - The food details (description). "
+        "   - The calories number (estimated or specified). "
+        "   - The new projected daily calorie count for the day (today's current total + this meal's calories). "
+        "   (For example: 'I would like to log a Turkey sandwich (350 calories). This will bring your daily calorie count to 1250. May I proceed?'). "
+        "   Do NOT call the `save_nutrition_log` tool yet; ask and wait for the user to respond. "
+        "4. Once the user replies and gives you permission in a subsequent turn, call the `save_nutrition_log` tool. "
+        "5. Calculate the final daily calories consumed and remaining, and return the structured result by calling the `finish_task` tool. "
+        "CRITICAL: Call the `finish_task` tool directly as a tool call. Never wrap the tool call inside print(), python markdown blocks, code blocks, or string formats. Invoke it strictly as a tool function."
     ),
     tools=[get_user_profile, save_nutrition_log, get_daily_intake]
 )
@@ -73,7 +78,7 @@ nutrition_tracker = Agent(
 # 2. Preference Profiler / Profile Manager Sub-Agent (Task Mode)
 # -------------------------------------------------------------
 profile_manager = Agent(
-    model=TASK_MODEL,
+    model=ORCHESTRATOR_MODEL,
     name='profile_manager',
     description='Specializes in updating and retrieving user profiles, cuisine interests (Asian, American, French), and dietary restrictions.',
     mode='task',
@@ -84,7 +89,7 @@ profile_manager = Agent(
         "Use the `get_user_profile` tool to read the current profile, and `update_user_profile` to update specific fields. "
         "You can update cuisine interests on a scale from 0.0 to 1.0. "
         "Once completed, return the structured result by calling the `finish_task` tool. "
-        "CRITICAL: Call the `finish_task` tool directly. Never wrap your tool call inside a Python print() statement, python markdown block, or code block."
+        "CRITICAL: Call the `finish_task` tool directly as a tool call. Never wrap the tool call inside print(), python markdown blocks, code blocks, or string formats. Invoke it strictly as a tool function."
     ),
     tools=[get_user_profile, update_user_profile]
 )
@@ -105,8 +110,7 @@ meal_searcher = Agent(
         "1. Retrieve the user's profile via `get_user_profile` (to check location, cuisine preferences, and calorie target). "
         "2. Retrieve the user's logged intake for today via `get_daily_intake` (to calculate remaining daily calorie budget). "
         "3. Find suggestions that fit within the user's remaining calorie budget. "
-        "   - For restaurant searches: Use `google_search_restaurants` with the user's preferred cuisine and neighborhood. "
-        "     Estimate or analyze the calorie counts of dishes using `analyze_menu_nutrition`. "
+        "   - For restaurant searches: BEFORE you call the `google_search_restaurants` tool, you MUST explicitly ask the user for permission (e.g., 'I would like to search Google for French restaurants in Dupont Circle. May I proceed?'). Do NOT call the tool yet; ask and wait for the user to respond. Once the user replies and gives you permission in a subsequent turn, proceed to call `google_search_restaurants` with the user's preferred cuisine and neighborhood. Then estimate or analyze the calorie counts of dishes using `analyze_menu_nutrition`. "
         "   - For recipes: Generate a recipe tailored to their cuisine preferences, dietary restrictions, and remaining calories. "
         "Once completed, return the structured result by calling the `finish_task` tool. "
         "CRITICAL: Call the `finish_task` tool directly. Never wrap your tool call inside a Python print() statement, python markdown block, or code block."
@@ -117,7 +121,30 @@ meal_searcher = Agent(
 # -------------------------------------------------------------
 # 4. Main Orchestrator Agent (Root Agent)
 # -------------------------------------------------------------
-root_agent = Agent(
+from typing import Any, AsyncGenerator
+
+class CustomRootAgent(Agent):
+    async def _run_impl(
+        self,
+        *,
+        ctx: Any,
+        node_input: Any,
+    ) -> AsyncGenerator[Any, None]:
+        # Clear dynamic node task references from prior turns to prevent asyncio self-await deadlocks.
+        if ctx._workflow_scheduler and hasattr(ctx._workflow_scheduler, '_state'):
+            runs = getattr(ctx._workflow_scheduler._state, 'runs', {})
+            import asyncio
+            current_task = asyncio.current_task()
+            for path, run in list(runs.items()):
+                if run.task and run.task != current_task:
+                    if not run.task.done():
+                        run.task.cancel()
+                    run.task = None
+
+        async for event in super()._run_impl(ctx=ctx, node_input=node_input):
+            yield event
+
+root_agent = CustomRootAgent(
     model=ORCHESTRATOR_MODEL,
     name='root_agent',
     description='Core Food & Nutrition Assistant that coordinates logging, profile updates, and meal searches.',
