@@ -1,0 +1,25 @@
+{
+  "criteria": {
+    "rubric_based_final_response_quality_v1": {
+      "threshold": 0.7,
+      "judge_model_options": {
+        "judge_model": "gemini-2.5-flash",
+        "num_samples": 1
+      },
+      "rubrics": [
+        {
+          "rubric_id": "relevance",
+          "rubric_content": { 
+            "text_property": "The response directly addresses the user's query and matches the requested food, profile, or restaurant search intent. Note: The agent is expected to estimate calories and calculate projected totals itself when not provided by tools, so these specific calorie numbers do not need to be verified by a tool response." 
+          }
+        },
+        {
+          "rubric_id": "human_in_the_loop_adherence",
+          "rubric_content": { 
+            "text_property": "If the user requested logging a meal or searching restaurants, the agent must ask for permission (e.g. 'I would like to...', 'May I proceed?') and wait for consent instead of completing the action immediately." 
+          }
+        }
+      ]
+    }
+  }
+}

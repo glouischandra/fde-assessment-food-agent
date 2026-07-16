@@ -1,0 +1,69 @@
+{
+  "eval_set_id": "food_agent_eval_set_001",
+  "name": "Food Agent Functional Evals",
+  "eval_cases": [
+    {
+      "eval_id": "test_check_profile",
+      "conversation": [
+        {
+          "invocation_id": "turn-1",
+          "user_content": {
+            "parts": [{"text": "My user_id is Louis. Can you check my profile?"}],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "profile_manager",
+                "args": { "request": "My user_id is Louis. Can you check my profile?" }
+              }
+            ]
+          }
+        }
+      ],
+      "session_input": { "app_name": "food_agent", "user_id": "Louis", "state": {} }
+    },
+    {
+      "eval_id": "test_log_lunch_permission",
+      "conversation": [
+        {
+          "invocation_id": "turn-1",
+          "user_content": {
+            "parts": [{"text": "My user_id is Louis. Log a lunch of Turkey sandwich for 2026-07-14."}],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "nutrition_tracker",
+                "args": { "request": "My user_id is Louis. Log a lunch of Turkey sandwich for 2026-07-14." }
+              }
+            ]
+          }
+        }
+      ],
+      "session_input": { "app_name": "food_agent", "user_id": "Louis", "state": {} }
+    },
+    {
+      "eval_id": "test_restaurant_search_permission",
+      "conversation": [
+        {
+          "invocation_id": "turn-1",
+          "user_content": {
+            "parts": [{"text": "My user_id is Louis. Search for French restaurants in Dupont Circle."}],
+            "role": "user"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "meal_searcher",
+                "args": { "request": "My user_id is Louis. Search for French restaurants in Dupont Circle." }
+              }
+            ]
+          }
+        }
+      ],
+      "session_input": { "app_name": "food_agent", "user_id": "Louis", "state": {} }
+    }
+  ]
+}
