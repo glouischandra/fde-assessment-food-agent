@@ -51,7 +51,7 @@ class MealSearcherResult(BaseModel):
 # 1. Nutrition Tracker Sub-Agent (Task Mode)
 # -------------------------------------------------------------
 nutrition_tracker = Agent(
-    model=TASK_MODEL,
+    model=ORCHESTRATOR_MODEL,
     name='nutrition_tracker',
     description='Specializes in logging user food intake, estimating calories, and checking daily nutrition totals.',
     mode='task',
@@ -69,7 +69,7 @@ nutrition_tracker = Agent(
         "   Do NOT call the `save_nutrition_log` tool yet; ask and wait for the user to respond. "
         "4. Once the user replies and gives you permission in a subsequent turn, call the `save_nutrition_log` tool. "
         "5. Calculate the final daily calories consumed and remaining, and return the structured result by calling the `finish_task` tool. "
-        "CRITICAL: Call the `finish_task` tool directly as a tool call. Never wrap the tool call inside print(), python markdown blocks, code blocks, or string formats. Invoke it strictly as a tool function."
+        "CRITICAL: All tool calls (including get_user_profile, save_nutrition_log, get_daily_intake, and finish_task) MUST be called directly as structured tool calls. Never wrap any tool call inside print(), python code blocks, python markdown, or string formats. Invoke them strictly as tool functions."
     ),
     tools=[get_user_profile, save_nutrition_log, get_daily_intake]
 )
@@ -78,7 +78,7 @@ nutrition_tracker = Agent(
 # 2. Preference Profiler / Profile Manager Sub-Agent (Task Mode)
 # -------------------------------------------------------------
 profile_manager = Agent(
-    model=TASK_MODEL,
+    model=ORCHESTRATOR_MODEL,
     name='profile_manager',
     description='Specializes in updating and retrieving user profiles, cuisine interests (Asian, American, French), and dietary restrictions.',
     mode='task',
@@ -89,7 +89,7 @@ profile_manager = Agent(
         "Use the `get_user_profile` tool to read the current profile, and `update_user_profile` to update specific fields. "
         "You can update cuisine interests on a scale from 0.0 to 1.0. "
         "Once completed, return the structured result by calling the `finish_task` tool. "
-        "CRITICAL: Call the `finish_task` tool directly as a tool call. Never wrap the tool call inside print(), python markdown blocks, code blocks, or string formats. Invoke it strictly as a tool function."
+        "CRITICAL: All tool calls (including get_user_profile, update_user_profile, and finish_task) MUST be called directly as structured tool calls. Never wrap any tool call inside print(), python code blocks, python markdown, or string formats. Invoke them strictly as tool functions."
     ),
     tools=[get_user_profile, update_user_profile]
 )
