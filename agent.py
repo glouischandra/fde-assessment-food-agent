@@ -116,3 +116,17 @@ root_agent = Agent(
     ),
     sub_agents=[nutrition_tracker, profile_manager, meal_searcher]
 )
+
+# -------------------------------------------------------------
+# 5. App Orchestration with Memory Event Compaction
+# -------------------------------------------------------------
+from google.adk.apps.app import App, EventsCompactionConfig
+
+app = App(
+    name="food_agent",
+    root_agent=root_agent,
+    events_compaction_config=EventsCompactionConfig(
+        compaction_interval=3,  # Trigger compaction every 3 turns
+        overlap_size=1,        # Keep 1 turn of history for overlap context
+    )
+)
