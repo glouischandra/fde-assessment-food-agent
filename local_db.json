@@ -1,0 +1,51 @@
+{
+  "users": {
+    "test_user_999": {
+      "userId": "test_user_999",
+      "name": "User",
+      "dailyCalorieTarget": 2000,
+      "dietaryRestrictions": [],
+      "cuisinePreferences": {
+        "asian": 0.2,
+        "american": 0.5,
+        "french": 0.9
+      },
+      "location": {
+        "metroArea": "Washington D.C. Metro Area",
+        "neighborhood": "Logan Circle",
+        "latitude": 38.9096,
+        "longitude": -77.0433
+      }
+    }
+  },
+  "nutrition_logs": [
+    {
+      "userId": "test_user_999",
+      "date": "2026-07-14",
+      "mealType": "lunch",
+      "description": "Turkey sandwich with mustard",
+      "nutrients": {
+        "calories": 350,
+        "proteinGrams": 25,
+        "carbsGrams": 40,
+        "fatGrams": 8
+      },
+      "timestamp": "2026-07-14T18:52:06.235232Z",
+      "logId": "log_1784069526235"
+    },
+    {
+      "userId": "test_user_999",
+      "date": "2026-07-14",
+      "mealType": "snack",
+      "description": "Apple",
+      "nutrients": {
+        "calories": 95,
+        "proteinGrams": 0,
+        "carbsGrams": 25,
+        "fatGrams": 0
+      },
+      "timestamp": "2026-07-14T18:52:06.235431Z",
+      "logId": "log_1784069526235"
+    }
+  ]
+}

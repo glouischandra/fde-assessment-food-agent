@@ -1,0 +1,5 @@
+google-cloud-aiplatform[agent_engines]
+google-adk[eval]
+google-adk[a2a]==2.3.0
+vertexai
+google-cloud-firestore
