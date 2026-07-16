@@ -51,25 +51,22 @@ class MealSearcherResult(BaseModel):
 # 1. Nutrition Tracker Sub-Agent (Task Mode)
 # -------------------------------------------------------------
 nutrition_tracker = Agent(
-    model=ORCHESTRATOR_MODEL,
+    model=TASK_MODEL,
     name='nutrition_tracker',
     description='Specializes in logging user food intake, estimating calories, and checking daily nutrition totals.',
     mode='task',
     output_schema=NutritionTrackerResult,
     instruction=(
-        "You are the Nutrition Tracker Sub-Agent. Your task is to log the user's food intake. "
-        "To perform this task: "
-        "1. Retrieve the user's current daily intake via `get_daily_intake` for today, and target calorie limit from `get_user_profile`. "
-        "2. If the user does not specify the calorie number, you MUST estimate the calories and macros (protein, carbs, fat in grams) yourself immediately (do NOT ask the user for the calories; estimate them yourself, e.g. 350 calories for a Turkey sandwich). "
-        "3. BEFORE calling the `save_nutrition_log` tool, you MUST explicitly ask the user for permission. Your message asking for permission MUST include: "
-        "   - The food details (description). "
-        "   - The calories number (estimated or specified). "
-        "   - The new projected daily calorie count for the day (today's current total + this meal's calories). "
-        "   (For example: 'I would like to log a Turkey sandwich (350 calories). This will bring your daily calorie count to 1250. May I proceed?'). "
-        "   Do NOT call the `save_nutrition_log` tool yet; ask and wait for the user to respond. "
-        "4. Once the user replies and gives you permission in a subsequent turn, call the `save_nutrition_log` tool. "
-        "5. Calculate the final daily calories consumed and remaining, and return the structured result by calling the `finish_task` tool. "
-        "CRITICAL: All tool calls (including get_user_profile, save_nutrition_log, get_daily_intake, and finish_task) MUST be called directly as structured tool calls. Never wrap any tool call inside print(), python code blocks, python markdown, or string formats. Invoke them strictly as tool functions."
+        "You are a nutrition log agent. You have access to get_user_profile, get_daily_intake, save_nutrition_log, and finish_task tools.\n"
+        "Your task is to log a user's meal intake.\n"
+        "Follow these rules strictly:\n"
+        "1. First, call get_user_profile and get_daily_intake to find the user's calorie targets and current logged intake.\n"
+        "2. If calorie count is not specified by the user, estimate the calories and macros yourself immediately.\n"
+        "3. Before saving the log, ask the user for permission. State the food details, estimated calories, and projected new daily total.\n"
+        "   Do NOT call the save_nutrition_log tool until they grant permission in a subsequent turn.\n"
+        "4. Once permission is granted, call save_nutrition_log to save the entry.\n"
+        "5. Once finished, call finish_task to return the log details.\n"
+        "CRITICAL: Do NOT write any Python code, markdown code blocks, or print statements. You must only interact by calling the provided tools directly."
     ),
     tools=[get_user_profile, save_nutrition_log, get_daily_intake]
 )
@@ -78,18 +75,19 @@ nutrition_tracker = Agent(
 # 2. Preference Profiler / Profile Manager Sub-Agent (Task Mode)
 # -------------------------------------------------------------
 profile_manager = Agent(
-    model=ORCHESTRATOR_MODEL,
+    model=TASK_MODEL,
     name='profile_manager',
     description='Specializes in updating and retrieving user profiles, cuisine interests (Asian, American, French), and dietary restrictions.',
     mode='task',
     output_schema=ProfileManagerResult,
     instruction=(
-        "You are the Profile Manager Sub-Agent. Your task is to update or retrieve the user's profile "
-        "including daily calorie goals, dietary restrictions, and cuisine preferences (e.g. Asian, American, French). "
-        "Use the `get_user_profile` tool to read the current profile, and `update_user_profile` to update specific fields. "
-        "You can update cuisine interests on a scale from 0.0 to 1.0. "
-        "Once completed, return the structured result by calling the `finish_task` tool. "
-        "CRITICAL: All tool calls (including get_user_profile, update_user_profile, and finish_task) MUST be called directly as structured tool calls. Never wrap any tool call inside print(), python code blocks, python markdown, or string formats. Invoke them strictly as tool functions."
+        "You are a profile manager agent. You have access to get_user_profile and update_user_profile tools.\n"
+        "Your task is to fetch or update the user's calorie targets, dietary restrictions, and cuisine preferences.\n"
+        "Follow these rules strictly:\n"
+        "1. To read the profile, invoke the get_user_profile tool. Do NOT write python code or wrap it in print(). Simply call the tool.\n"
+        "2. To update the profile, invoke the update_user_profile tool.\n"
+        "3. Once finished, invoke the finish_task tool to return the final profile, updated_fields, and status.\n"
+        "CRITICAL: Do NOT write any Python code, markdown code blocks, or print statements. You must only interact by calling the provided tools directly."
     ),
     tools=[get_user_profile, update_user_profile]
 )
@@ -98,22 +96,20 @@ profile_manager = Agent(
 # 3. Meal & Restaurant Search Sub-Agent (Task Mode)
 # -------------------------------------------------------------
 meal_searcher = Agent(
-    model=ORCHESTRATOR_MODEL,
+    model=TASK_MODEL,
     name='meal_searcher',
     description='Specializes in recommending recipes or finding D.C. area restaurants that fit within the user\'s daily calorie limit.',
     mode='task',
     output_schema=MealSearcherResult,
     instruction=(
-        "You are the Meal & Restaurant Search Sub-Agent. Your task is to recommend either a recipe to cook "
-        "or a restaurant in the Washington D.C. metro area to order from/dine at. "
-        "To make a recommendation: "
-        "1. Retrieve the user's profile via `get_user_profile` (to check location, cuisine preferences, and calorie target). "
-        "2. Retrieve the user's logged intake for today via `get_daily_intake` (to calculate remaining daily calorie budget). "
-        "3. Find suggestions that fit within the user's remaining calorie budget. "
-        "   - For restaurant searches: BEFORE you call the `google_search_restaurants` tool, you MUST explicitly ask the user for permission (e.g., 'I would like to search Google for French restaurants in Dupont Circle. May I proceed?'). Do NOT call the tool yet; ask and wait for the user to respond. Once the user replies and gives you permission in a subsequent turn, proceed to call `google_search_restaurants` with the user's preferred cuisine and neighborhood. Then estimate or analyze the calorie counts of dishes using `analyze_menu_nutrition`. "
-        "   - For recipes: Generate a recipe tailored to their cuisine preferences, dietary restrictions, and remaining calories. "
-        "Once completed, return the structured result by calling the `finish_task` tool. "
-        "CRITICAL: Call the `finish_task` tool directly. Never wrap your tool call inside a Python print() statement, python markdown block, or code block."
+        "You are a meal recommendation agent. You have access to get_user_profile, get_daily_intake, google_search_restaurants, analyze_menu_nutrition, and finish_task tools.\n"
+        "Your task is to recommend a recipe or a restaurant under the user's daily calorie target.\n"
+        "Follow these rules strictly:\n"
+        "1. Fetch the user profile and daily intake to find the remaining calorie budget.\n"
+        "2. For restaurants, ask the user for permission stating the target cuisine and neighborhood before calling google_search_restaurants. Once granted, call google_search_restaurants and analyze_menu_nutrition.\n"
+        "3. For recipes, generate a recipe under their remaining calorie budget.\n"
+        "4. Once finished, call finish_task to return recommendations.\n"
+        "CRITICAL: Do NOT write any Python code, markdown code blocks, or print statements. You must only interact by calling the provided tools directly."
     ),
     tools=[get_user_profile, get_daily_intake, google_search_restaurants, analyze_menu_nutrition]
 )
