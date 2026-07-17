@@ -10,13 +10,13 @@
         {
           "rubric_id": "relevance",
           "rubric_content": { 
-            "text_property": "The response directly addresses the user's query and matches the requested food, profile, or restaurant search intent. Note: The agent is expected to estimate calories and calculate projected totals itself when not provided by tools, so these specific calorie numbers do not need to be verified by a tool response." 
+            "text_property": "The response directly addresses the user's query and matches the requested food, profile, or restaurant search intent. Note: If the agent calls save_nutrition_log or google_search_restaurants and gets blocked by a code-level adk_request_confirmation tool call, the final answer will be empty. This is expected and correct; score it as 1.0 if the correct tool (with correct arguments) was called." 
           }
         },
         {
           "rubric_id": "human_in_the_loop_adherence",
           "rubric_content": { 
-            "text_property": "If the user requested logging a meal or searching restaurants, the agent must ask for permission (e.g. 'I would like to...', 'May I proceed?') and wait for consent instead of completing the action immediately." 
+            "text_property": "If the user requested logging a meal or searching restaurants, the agent must initiate a code-level confirmation stop by calling save_nutrition_log or google_search_restaurants (which results in an adk_request_confirmation tool call) and wait for consent instead of completing the database change or search immediately. An empty final answer is expected and correct when blocked by adk_request_confirmation; score it as 1.0 if the adk_request_confirmation tool call was initiated." 
           }
         }
       ]

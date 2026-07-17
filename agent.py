@@ -3,6 +3,7 @@ from google.adk.models.google_llm import Gemini
 from google.genai import types
 from pydantic import BaseModel, Field
 from typing import Literal, List, Dict, Optional
+from google.adk.tools import FunctionTool
 from .tools import (
     get_user_profile,
     update_user_profile,
@@ -11,6 +12,11 @@ from .tools import (
     google_search_restaurants,
     analyze_menu_nutrition
 )
+
+import asyncio
+
+save_nutrition_log_tool = FunctionTool(save_nutrition_log, require_confirmation=True)
+google_search_restaurants_tool = FunctionTool(google_search_restaurants, require_confirmation=True)
 
 # Configure retry options for Vertex AI Gemini calls (for robust 429 rate limit mitigation)
 retry_config = types.HttpRetryOptions(
@@ -60,19 +66,13 @@ nutrition_tracker = Agent(
         "You are a nutrition log agent. You have access to get_user_profile, get_daily_intake, save_nutrition_log, and finish_task tools.\n"
         "Your task is to log a user's meal intake.\n"
         "Follow these rules strictly:\n"
-        "1. First, call get_user_profile and get_daily_intake. If date is not specified, default to today's date.\n"
-        "2. If the user did not specify the calorie number, you MUST estimate the calories immediately yourself (e.g. 350 calories for a Turkey sandwich). Do NOT ask the user for calories under any circumstances. You must estimate them yourself.\n"
-        "3. ### HUMAN-IN-THE-LOOP (HITL) PROTOCOL:\n"
-        "   - You are strictly forbidden from calling the save_nutrition_log tool during the first turn or if user permission has not yet been obtained.\n"
-        "   - You must first ask the user for permission. Your message MUST state: the food details, the estimated calories, and the projected new daily calorie count (today's current total + this meal's calories).\n"
-        "     Example: 'I would like to log a Turkey sandwich (350 calories). This will bring your daily calorie count to 350. May I proceed?'\n"
-        "   - Stop execution and wait for a response after asking for permission. Do NOT call save_nutrition_log or finish_task yet.\n"
-        "   - ONLY call save_nutrition_log in a subsequent turn once the user explicitly replies 'yes', 'proceed', or gives consent.\n"
-        "4. Once permission is granted, call save_nutrition_log to save the entry.\n"
-        "5. Once finished, call finish_task to return the log details.\n"
+        "1. First, call get_user_profile and get_daily_intake to find the user's calorie targets and current logged intake.\n"
+        "2. If calorie count is not specified by the user, estimate the calories and macros yourself immediately.\n"
+        "3. To save the log, call save_nutrition_log. Since save_nutrition_log requires user approval, the platform will automatically pause execution to ask the user for confirmation. Simply invoke save_nutrition_log directly.\n"
+        "4. Once save_nutrition_log completes, invoke finish_task to return the log details.\n"
         "CRITICAL: Do NOT write any Python code, markdown code blocks, or print statements. You must only interact by calling the provided tools directly."
     ),
-    tools=[get_user_profile, save_nutrition_log, get_daily_intake]
+    tools=[get_user_profile, save_nutrition_log_tool, get_daily_intake]
 )
 
 # -------------------------------------------------------------
@@ -110,17 +110,13 @@ meal_searcher = Agent(
         "Your task is to recommend a recipe or a restaurant under the user's daily calorie target.\n"
         "Follow these rules strictly:\n"
         "1. Fetch the user profile and daily intake to find the remaining calorie budget.\n"
-        "2. ### HUMAN-IN-THE-LOOP (HITL) PROTOCOL FOR RESTAURANTS:\n"
-        "   - You are strictly forbidden from calling the google_search_restaurants tool during the first turn or if user permission has not yet been obtained.\n"
-        "   - You must first ask the user for permission, stating the target cuisine and neighborhood you plan to search.\n"
-        "   - Stop execution and wait for a response after asking for permission. Do NOT call google_search_restaurants yet.\n"
-        "   - ONLY call google_search_restaurants in a subsequent turn if the user has explicitly given permission (e.g. 'yes', 'proceed', 'go ahead', 'ok').\n"
-        "   - Once permission is granted, proceed to call google_search_restaurants and analyze_menu_nutrition.\n"
-        "3. For recipes, generate a recipe under their remaining calorie budget.\n"
-        "4. Once finished, call finish_task to return recommendations.\n"
+        "2. For recipes, generate a recipe under their remaining calorie budget.\n"
+        "3. For restaurants, call google_search_restaurants. Since google_search_restaurants requires user approval, the platform will automatically pause execution to ask the user for confirmation. Simply invoke google_search_restaurants directly.\n"
+        "4. Once google_search_restaurants completes, call analyze_menu_nutrition to recommend restaurants.\n"
+        "5. Once finished, call finish_task to return recommendations.\n"
         "CRITICAL: Do NOT write any Python code, markdown code blocks, or print statements. You must only interact by calling the provided tools directly."
     ),
-    tools=[get_user_profile, get_daily_intake, google_search_restaurants, analyze_menu_nutrition]
+    tools=[get_user_profile, get_daily_intake, google_search_restaurants_tool, analyze_menu_nutrition]
 )
 
 # -------------------------------------------------------------
@@ -138,7 +134,6 @@ class CustomRootAgent(Agent):
         # Clear dynamic node task references from prior turns to prevent asyncio self-await deadlocks.
         if ctx._workflow_scheduler and hasattr(ctx._workflow_scheduler, '_state'):
             runs = getattr(ctx._workflow_scheduler._state, 'runs', {})
-            import asyncio
             current_task = asyncio.current_task()
             for path, run in list(runs.items()):
                 if run.task and run.task != current_task:
@@ -173,8 +168,8 @@ async def run_compaction_bg(session, session_service):
     except Exception as e:
         logger.error(f"Background event compaction failed: {e}")
 
-async def async_compaction_callback(ctx: CallbackContext):
-    inv_ctx = ctx._invocation_context
+async def async_compaction_callback(callback_context: CallbackContext, **kwargs):
+    inv_ctx = callback_context._invocation_context
     # Run the compaction as a non-blocking background task.
     asyncio.create_task(run_compaction_bg(inv_ctx.session, inv_ctx.session_service))
 
