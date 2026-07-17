@@ -1,22 +1,24 @@
-import os
 import asyncio
 import logging
-logging.basicConfig(level=logging.INFO)
+import os
+
 from tools import (
-    get_user_profile,
-    update_user_profile,
-    save_nutrition_log,
+    analyze_menu_nutrition,
+    db,
     get_daily_intake,
+    get_user_profile,
     google_search_restaurants,
-    analyze_menu_nutrition
+    save_nutrition_log,
+    update_user_profile,
 )
+
+logging.basicConfig(level=logging.INFO)
 
 async def run_tests():
     user_id = "test_user_999"
     date_str = "2026-07-14"
 
     # Clean up existing test data in Firestore for idempotence
-    from tools import db
     try:
         await db.collection("users").document(user_id).delete()
         logs = db.collection("nutrition_logs").where("userId", "==", user_id).stream()

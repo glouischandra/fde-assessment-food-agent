@@ -1,19 +1,25 @@
+import asyncio
+from copy import copy
+from typing import Any, AsyncGenerator, Dict, List, Literal, Optional
+
+from google.adk.agents.callback_context import CallbackContext
 from google.adk.agents.llm_agent import Agent
+from google.adk.apps.app import App, EventsCompactionConfig
+from google.adk.apps.compaction import _run_compaction_for_sliding_window
 from google.adk.models.google_llm import Gemini
+from google.adk.tools import FunctionTool
 from google.genai import types
 from pydantic import BaseModel, Field
-from typing import Literal, List, Dict, Optional
-from google.adk.tools import FunctionTool
-from .tools import (
-    get_user_profile,
-    update_user_profile,
-    save_nutrition_log,
-    get_daily_intake,
-    google_search_restaurants,
-    analyze_menu_nutrition
-)
 
-import asyncio
+from .tools import (
+    analyze_menu_nutrition,
+    get_daily_intake,
+    get_user_profile,
+    google_search_restaurants,
+    save_nutrition_log,
+    update_user_profile,
+)
+from .trace_logging import logger
 
 save_nutrition_log_tool = FunctionTool(save_nutrition_log, require_confirmation=True)
 google_search_restaurants_tool = FunctionTool(google_search_restaurants, require_confirmation=True)
@@ -122,7 +128,6 @@ meal_searcher = Agent(
 # -------------------------------------------------------------
 # 4. Main Orchestrator Agent (Root Agent)
 # -------------------------------------------------------------
-from typing import Any, AsyncGenerator
 
 class CustomRootAgent(Agent):
     async def _run_impl(
@@ -144,18 +149,12 @@ class CustomRootAgent(Agent):
         async for event in super()._run_impl(ctx=ctx, node_input=node_input):
             yield event
 
-from .trace_logging import logger
-from google.adk.apps.app import App, EventsCompactionConfig
-from google.adk.apps.compaction import _run_compaction_for_sliding_window
-from google.adk.agents.callback_context import CallbackContext
-
 compaction_config = EventsCompactionConfig(
     compaction_interval=3,  # Trigger compaction every 3 turns
     overlap_size=1,        # Keep 1 turn of history for overlap context
 )
 
 async def run_compaction_bg(session, session_service):
-    from copy import copy
     temp_app = copy(app)
     temp_app.events_compaction_config = compaction_config
     try:

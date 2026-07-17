@@ -1,6 +1,7 @@
-import os
-import logging
 from datetime import datetime, timedelta
+import logging
+import os
+
 from google.cloud import firestore
 
 from trace_logging import logger

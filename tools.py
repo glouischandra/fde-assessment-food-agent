@@ -1,26 +1,32 @@
-import os
-import json
 import asyncio
-from pydantic import BaseModel, Field, field_validator, ValidationError
+import json
+import os
 from typing import Literal
+
+from pydantic import BaseModel, Field, ValidationError, field_validator
+
+try:
+    from .constants import DC_RESTAURANTS
+except ImportError:
+    from constants import DC_RESTAURANTS
 
 try:
     from .storage import (
-        db,
         FIRESTORE_AVAILABLE,
+        db,
+        get_daily_intake,
         get_user_profile,
-        update_user_profile,
         save_nutrition_log,
-        get_daily_intake
+        update_user_profile,
     )
 except ImportError:
     from storage import (
-        db,
         FIRESTORE_AVAILABLE,
+        db,
+        get_daily_intake,
         get_user_profile,
-        update_user_profile,
         save_nutrition_log,
-        get_daily_intake
+        update_user_profile,
     )
 
 try:
@@ -47,11 +53,6 @@ class GoogleSearchRestaurantsInput(BaseModel):
 class AnalyzeMenuNutritionInput(BaseModel):
     restaurant_name: str = Field(..., description="Name of the restaurant")
     dish_description: str = Field(..., description="Description or name of the dish")
-
-try:
-    from .constants import DC_RESTAURANTS
-except ImportError:
-    from constants import DC_RESTAURANTS
 
 # -------------------------------------------------------------
 # Google Search Fallback / D.C. Restaurant Database (Async Tools)
